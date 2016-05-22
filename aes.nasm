@@ -1,5 +1,10 @@
 [bits 64]
 
+; Significant parts of the code were taken from Intel AESNI Sample Library:
+; https://software.intel.com/en-us/articles/download-the-intel-aesni-sample-library
+; Parameter registers were changed to suit x86-64/Linux:
+; RDI, RSI, RDX, RCX, R8, R9, XMM0–7:
+
 %macro copy_round_keys 3
 	movdqu xmm4,[%2 + ((%3)*16)]
 	movdqa [%1 + ((%3)*16)],xmm4
@@ -91,8 +96,6 @@ key_expansion128:
     add rsi, 0x10
     ret
 
-; Order of parameters in x86-64/Linux:
-; RDI, RSI, RDX, RCX, R8, R9, XMM0–7add:
 
 align 16
 global iEncExpandKey128
