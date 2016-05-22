@@ -19,6 +19,53 @@
 	movdqu	%1,xmm0
 %endmacro
 
+%macro aesdec1_u 1
+	movdqu xmm4,%1
+	aesdec xmm0,xmm4
+%endmacro
+
+%macro load_and_xor4 2
+	movdqa	xmm4,%2
+	movdqu	xmm0,[%1 + 0*16]
+	pxor	xmm0,xmm4
+	movdqu	xmm1,[%1 + 1*16]
+	pxor	xmm1,xmm4
+	movdqu	xmm2,[%1 + 2*16]
+	pxor	xmm2,xmm4
+	movdqu	xmm3,[%1 + 3*16]
+	pxor	xmm3,xmm4
+%endmacro
+
+%macro aesdec4 1
+	movdqa	xmm4,%1
+
+	aesdec	xmm0,xmm4
+	aesdec	xmm1,xmm4
+	aesdec	xmm2,xmm4
+	aesdec	xmm3,xmm4
+%endmacro
+
+%macro aesdeclast4 1
+	movdqa	xmm4,%1
+
+	aesdeclast	xmm0,xmm4
+	aesdeclast	xmm1,xmm4
+	aesdeclast	xmm2,xmm4
+	aesdeclast	xmm3,xmm4
+%endmacro
+
+%macro aesdeclast1_u 1
+	movdqu xmm4,%1
+	aesdeclast	xmm0,xmm4
+%endmacro
+
+%macro store4 1
+	movdqu [%1 + 0*16],xmm0
+	movdqu [%1 + 1*16],xmm1
+	movdqu [%1 + 2*16],xmm2
+	movdqu [%1 + 3*16],xmm3
+%endmacro
+
 section .data
 align 16
 shuffle_mask:
@@ -169,3 +216,114 @@ lp128encsingle_CBC:
 	add rsp,16*16+8
 	ret
 
+
+
+align 16
+global iDec128_CBC
+iDec128_CBC:
+	
+	sub rsp,16*16+8
+
+	mov r9,rdi
+	mov rax,[rdi+24]
+	movdqu	xmm5,[rax]
+	
+	mov eax,[rdi+32] ; numblocks
+	mov rsi,[rdi]
+	mov r8,[rdi+8]
+	mov rdi,[rdi+16]
+	
+	
+	sub r8,rsi
+
+
+	test eax,eax
+	jz end_dec128_CBC
+
+	cmp eax,4
+	jl	lp128decsingle_CBC
+
+	test	rdi,0xf
+	jz		lp128decfour_CBC
+	
+	copy_round_keys rsp,rdi,0
+	copy_round_keys rsp,rdi,1
+	copy_round_keys rsp,rdi,2
+	copy_round_keys rsp,rdi,3
+	copy_round_keys rsp,rdi,4
+	copy_round_keys rsp,rdi,5
+	copy_round_keys rsp,rdi,6
+	copy_round_keys rsp,rdi,7
+	copy_round_keys rsp,rdi,8
+	copy_round_keys rsp,rdi,9
+	copy_round_keys rsp,rdi,10
+	mov rdi,rsp	
+
+
+align 16
+lp128decfour_CBC:
+	
+	test eax,eax
+	jz end_dec128_CBC
+
+	cmp eax,4
+	jl	lp128decsingle_CBC
+
+	load_and_xor4 rsi, [rdi+10*16]
+	add rsi,16*4
+	aesdec4 [rdi+9*16]
+	aesdec4 [rdi+8*16]
+	aesdec4 [rdi+7*16]
+	aesdec4 [rdi+6*16]
+	aesdec4 [rdi+5*16]
+	aesdec4 [rdi+4*16]
+	aesdec4 [rdi+3*16]
+	aesdec4 [rdi+2*16]
+	aesdec4 [rdi+1*16]
+	aesdeclast4 [rdi+0*16]
+
+	pxor	xmm0,xmm5
+	movdqu	xmm4,[rsi - 16*4 + 0*16]
+	pxor	xmm1,xmm4
+	movdqu	xmm4,[rsi - 16*4 + 1*16]
+	pxor	xmm2,xmm4
+	movdqu	xmm4,[rsi - 16*4 + 2*16]
+	pxor	xmm3,xmm4
+	movdqu	xmm5,[rsi - 16*4 + 3*16]
+	
+	sub eax,4
+	store4 r8+rsi-(16*4)
+	jmp lp128decfour_CBC
+
+
+align 16
+lp128decsingle_CBC:
+
+	movdqu xmm0, [rsi]
+	movdqa	xmm1,xmm0
+	movdqu xmm4,[rdi+10*16]
+	pxor xmm0, xmm4
+	aesdec1_u [rdi+9*16]
+	aesdec1_u [rdi+8*16]
+	aesdec1_u [rdi+7*16]
+	aesdec1_u [rdi+6*16]
+	aesdec1_u [rdi+5*16]
+	aesdec1_u [rdi+4*16]
+	aesdec1_u [rdi+3*16]
+	aesdec1_u [rdi+2*16]
+	aesdec1_u [rdi+1*16]
+	aesdeclast1_u [rdi+0*16]
+
+	pxor	xmm0,xmm5
+	movdqa	xmm5,xmm1
+	add rsi, 16
+	movdqu  [r8 + rsi - 16], xmm0
+	dec eax
+	jnz lp128decsingle_CBC
+
+end_dec128_CBC:
+
+	mov	   r9,[r9+24]
+	movdqu [r9],xmm5
+	add rsp,16*16+8
+	ret
